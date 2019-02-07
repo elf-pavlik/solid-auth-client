@@ -9,12 +9,59 @@ import { currentUrl, navigateTo, toUrlString } from './url-util'
 import type { webIdOidcSession } from './session'
 import type { AsyncStorage } from './storage'
 import { defaultStorage, getData, updateStorage } from './storage'
+import { Readable } from 'stream'
+import ParserN3 from '@rdfjs/parser-n3'
+import namespace from '@rdfjs/namespace'
+
+const ns = {
+  solid: namespace('http://www.w3.org/ns/solid/terms#')
+}
+
+async function discoverIssuer(webidOrIdp: string): Promise<string> {
+  const response = await fetch(webidOrIdp, {
+    headers: { "Accept": "text/turtle"}
+  })
+  const contentType = response.headers.get('content-type').split(';')[0] 
+  if (contentType !== 'text/turtle') {
+    return webidOrIdp
+  } else {
+    try {
+      const body = await response.text()
+      const parserN3 = new ParserN3()
+      const input = new Readable({
+        read: () => {
+          input.push(body)
+          input.push(null)
+        }
+      })
+      const output = parserN3.import(input)
+      return new Promise((resolve, reject) => {
+        let issuer = webidOrIdp
+        let done = false
+        function end () {
+         resolve(issuer) 
+        }
+        output.on('data', quad => {
+          if (quad.predicate.equals(ns.solid('oidcIssuer'))) {
+            issuer = quad.object.value
+          }
+        })
+        output.on('end', end)
+        output.on('err', reject)
+      })
+    } catch (err) {
+      console.warn('Error parsing turtle')
+      console.error(err)
+    }
+  }
+}
 
 export async function login(
-  idp: string,
+  webidOrIdp: string,
   options: loginOptions
 ): Promise<?null> {
   try {
+    const idp = await discoverIssuer(webidOrIdp)
     const rp = await getRegisteredRp(idp, options)
     await saveAppHashFragment(options.storage)
     return sendAuthRequest(rp, options)

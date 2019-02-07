@@ -26,9 +26,9 @@ export default class SolidAuthClient extends EventEmitter {
     return authnFetch(defaultStorage(), globalFetch, input, options)
   }
 
-  login(idp: string, options: loginOptions): Promise<?Session> {
+  login(webidOrIdp: string, options: loginOptions): Promise<?Session> {
     options = { ...defaultLoginOptions(currentUrlNoParams()), ...options }
-    return WebIdOidc.login(idp, options)
+    return WebIdOidc.login(webidOrIdp, options)
   }
 
   async popupLogin(options: loginOptions): Promise<?Session> {
